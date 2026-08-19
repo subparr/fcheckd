@@ -1,0 +1,13 @@
+[[watch]]
+path = "/path/to/watch"
+recursive = false # as optional field some none
+script = "/pathj/to/script"
+events = ["modify", "close_write", "access", "close_nonwrite", "delete_self", "move_self", "moved_from", "moved_to"]
+
+[[watch]]
+path = "/path/to/watch"
+recursive = true
+script = "/pathj/to/script"
+events = ["create", "modify", "attrib", "delete"]
+
+# events = ["access", "attrib", "close_write", "close_nonwrite", "create", "delete", "delete_self", "modify", "move_self", "moved_from", "moved_to", "open", "oneshot"] SOME FOR DIR ONLY CHECK
