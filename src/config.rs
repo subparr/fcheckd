@@ -22,37 +22,35 @@ pub struct CfgEntry {
     pub events: AddWatchFlags,
 }
 
-//shit code, rewrite after impl cli flags
-impl Cfg {
-    pub fn init() -> Self {
-        let mut configs: Vec<PathBuf> = default_cfg_paths();
-        let config_in_use = configs.pop().unwrap_or(PathBuf::from("/etc/fchekd/config.toml"));
 
-        let mut fd = File::open(config_in_use).expect("failed to open config");
+impl Cfg {
+    pub fn init(cli_config_path: Option<PathBuf>) -> Result<Self, Box<dyn std::error::Error>> {
+        let config_in_use = match cli_config_path {
+            Some(path) => path,
+            None => {
+                match home_config_path() {
+                    Some(path) => path,
+                    None => PathBuf::from("/etc/fchekd/config.toml")
+                }
+            }
+        };
+
+        let mut fd = File::open(config_in_use)?;
         let mut cfg_contents = String::new();
-        fd.read_to_string(&mut cfg_contents).expect("failed to read contets");
+        fd.read_to_string(&mut cfg_contents)?;
         
-        toml::from_str(&cfg_contents).expect("error parsing")
+        Ok(toml::from_str(&cfg_contents)?)
 
         }
     }
 
 
-//as FILO, don't really need two paths in mem, think of smth better later
-//also expect() placeholders, either propagate or better kms on error
-//
-fn default_cfg_paths() -> Vec<PathBuf> {
-    let mut retpaths = Vec::new();
-    
-    let defconf_path = "/etc/fcheckd/config.toml"; //default via unwrap_or on Cfg.init() anyways
+fn home_config_path() -> Option<PathBuf> {
     let defconf_home_path = ".config/fchekd/config.toml";
-
-    retpaths.push(PathBuf::from(defconf_path));
     match std::env::var_os("HOME") {
-        Some(home_path) => retpaths.push(PathBuf::from(home_path).join(defconf_home_path)),
-        None => {},
+        Some(home_path) => Some(PathBuf::from(home_path).join(defconf_home_path)),
+        None => None,
     }
-    retpaths
 }
 
 

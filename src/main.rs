@@ -3,6 +3,7 @@
 #![allow(unused_variables)]
 
 use nix::sys::inotify::AddWatchFlags;
+use std::path::PathBuf;
 mod config;
 mod args;
 
@@ -12,7 +13,8 @@ mod args;
 
 
 fn main() {
-    let cfg = config::Cfg::init();
+    let cfg = config::Cfg::init(Some(PathBuf::from("placeholder")));
+
 
 }
 
