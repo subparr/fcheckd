@@ -1,3 +1,7 @@
+#![allow(dead_code)]
+#![allow(unused_imports)]
+#![allow(unused_variables)]
+
 use nix::sys::inotify::AddWatchFlags;
 mod config;
 mod args;
@@ -8,6 +12,7 @@ mod args;
 
 
 fn main() {
-    println!("{:?}", AddWatchFlags::from_name("IN_MODIFY"))
+    let cfg = config::Cfg::init();
+
 }
 
