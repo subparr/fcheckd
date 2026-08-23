@@ -8,7 +8,7 @@ use nix::sys::inotify::AddWatchFlags;
 #[derive(Deserialize)]
 pub struct Cfg {
     #[serde(rename = "watch")]
-    entry: Vec<CfgEntry>,
+    pub entry: Vec<CfgEntry>,
 }
 
 #[derive(Deserialize)]
@@ -22,7 +22,8 @@ pub struct CfgEntry {
     pub events: AddWatchFlags,
 }
 
-
+//fallback to default on cfg unavailability, not only based on hierarchy, ie check every one and
+//handle cfg read in config module function
 impl Cfg {
     pub fn init(cli_config_path: Option<PathBuf>) -> Result<Self, Box<dyn std::error::Error>> {
         let config_in_use = match cli_config_path {
