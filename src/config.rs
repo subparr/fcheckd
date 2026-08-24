@@ -27,7 +27,7 @@ pub struct CfgEntry {
 impl Cfg {
     pub fn init(cli_config_path: Option<PathBuf>) -> Result<Self, Box<dyn std::error::Error>> {
         let config_in_use = match cli_config_path {
-            Some(path) => path,
+            Some(path) => path,     
             None => {
                 match home_config_path() {
                     Some(path) => path,
