@@ -5,16 +5,30 @@
 use std::process;
 use nix::sys::inotify::{Inotify, AddWatchFlags, InitFlags, InotifyEvent, WatchDescriptor};
 use std::collections::HashMap;
-use nix::sys::epoll::{Epoll, EpollEvent, EpollCreateFlags};
+use nix::sys::epoll::{Epoll, EpollEvent, EpollCreateFlags, EpollFlags, EpollTimeout};
 use nix::errno::Errno;
 use std::path::PathBuf;
 use nix::sys::signal::{SigSet, Signal, sigprocmask, SigmaskHow};
 use nix::sys::signalfd::{SignalFd, SfdFlags};
+
 mod config;
 use config::{Cfg, CfgEntry};
 
 use clap::Parser;
 mod args;
+
+//fn reload + delete watches from wd_to_script on watch death
+//listen to IN_DELETE_SELF just for internal logic for wd_to_script?
+//fn run hook 
+//event loop
+//recursive on inotify init 
+//check flags on inotify init 
+//logs to stdout or file?
+//main before event loop successful init log + watched
+//action log on verbose?
+
+const INOTIFY_EPOLL_TOKEN: u64 = 0;
+const SIGHUP_EPOLL_TOKEN: u64 = 1;
 
 struct InotifyState {
     inotify_fd: Inotify,
@@ -40,39 +54,79 @@ fn main() {
             eprintln!("Inotify init/add_watch error: {err}"); 
             process::exit(1); 
     });
+    drop(cfg); //not needed, flow is stuck in event_loop and old cfg will be in mem if not dropped
 
-    let epoll_fd = init_epoll().unwrap_or_else(|err| {
-            eprintln!("Epoll init error: {err}"); 
-            process::exit(1); 
-    });
-    
     let sighup_fd = init_sighup().unwrap_or_else(|err| {
             eprintln!("Sighup init error: {err}"); 
             process::exit(1); 
     });
+     
+    let epoll_fd = init_epoll(&inotify_state, &sighup_fd).unwrap_or_else(|err| {
+            eprintln!("Epoll init error: {err}"); 
+            process::exit(1); 
+    });
     
-        
-    event_loop(inotify_state, epoll_fd);
+    let _ = event_loop(inotify_state, sighup_fd, epoll_fd);
+    
 }
 
 
 
 
-fn event_loop(inotify_state: InotifyState, epoll_fd: Epoll){
+fn event_loop(mut inotify_state: InotifyState, sighup_fd: SignalFd, epoll_fd: Epoll) -> Result<(), Errno>{ 
+    let mut events = [EpollEvent::empty(); 2]; //2 for sighup in buf
+                                               
     loop{
-           
+        let ctr = epoll_fd.wait(&mut events, EpollTimeout::NONE)?; //blocks here until events
+        for event in &events[..ctr]{
+            match event.data(){
+                INOTIFY_EPOLL_TOKEN => run_script(&inotify_state)?, //Rc<>???
+                SIGHUP_EPOLL_TOKEN => reload_cfg(&sighup_fd, &mut inotify_state)?, 
+                _ => unreachable!("Unknown epoll token"),
+            }
+        }
+
     }
 }
 
-fn init_epoll() -> Result<Epoll, Errno>{
+fn reload_cfg(sighup_fd: &SignalFd, inotify_state: &mut InotifyState) -> Result<(), Errno>{
+    //cfg lives in main
+    //change wdtoscript on existing inotify fd in case cfg correct
+    //drop config in main after not needed to save mem
+    //check new cfg -> return bs -> nogo
+    //create new cfg instance, reinit wdtoscript on existing notify fd
+    //exit fn, don't propagate anything to main since flow is not returned there
+}
+
+fn run_script(inotify_state: &InotifyState) -> Result<(), Errno>{
+    loop{
+        match inotify_state.inotify_fd.read_events(){
+            Ok(events) => {
+                for event in events {
+                    let script = inotify_state.wd_to_script.get(&event.wd);
+                    // script goes brrrrrrr
+                }
+            },
+            Err(Errno::EAGAIN) => break Ok(()),
+            Err(e) => return Err(e),
+        }
+    }
+}
+
+fn init_epoll(inotify_state: &InotifyState, sighup_fd: &SignalFd) -> Result<Epoll, Errno>{
     let epoll_fd = Epoll::new(EpollCreateFlags::EPOLL_CLOEXEC)?;
+
+    epoll_fd.add(&inotify_state.inotify_fd, EpollEvent::new(EpollFlags::EPOLLIN, INOTIFY_EPOLL_TOKEN))?;
+    epoll_fd.add(sighup_fd, EpollEvent::new(EpollFlags::EPOLLIN, SIGHUP_EPOLL_TOKEN))?;
+
     Ok(epoll_fd)
 }
 
 
 fn init_inotify(cfg: &Cfg) -> Result<InotifyState, Errno>{
     let mut inotify_state = InotifyState{
-        inotify_fd: Inotify::init(InitFlags::IN_CLOEXEC | InitFlags::IN_NONBLOCK)?, //CLOEXEC NONBLOCK
+        //leave nonblock even for LT epoll just to be safe
+        inotify_fd: Inotify::init(InitFlags::IN_CLOEXEC | InitFlags::IN_NONBLOCK)?,
         wd_to_script: HashMap::new(),
     };
 
@@ -80,9 +134,10 @@ fn init_inotify(cfg: &Cfg) -> Result<InotifyState, Errno>{
         let cycle_wd = inotify_state.inotify_fd.
             add_watch(&entry.path, entry.events)?;
         inotify_state.wd_to_script.
-           insert(cycle_wd, entry.path.clone()); //clone burger shitcode
+           insert(cycle_wd, entry.path.clone()); 
     }
     Ok(inotify_state)
+
 }
 
 fn init_sighup() -> Result<SignalFd, Errno> { //add struct for storing signalfds if several introduced
@@ -94,9 +149,3 @@ fn init_sighup() -> Result<SignalFd, Errno> { //add struct for storing signalfds
     Ok(sighup_fd)
 }
 
-
-fn reload(sighup_fd: SignalFd) -> Result<>{
-   todo!() 
-}
-
-fn fire_script() -> Result,.{}
