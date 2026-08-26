@@ -35,8 +35,6 @@ struct InotifyState {
     wd_to_script: HashMap<WatchDescriptor, PathBuf>,
 }
 
-
-
 //store config in mem for cfg reload on wrong config + fn for reload 
 fn main() {
     let cli_args = args::CliArgs::parse();
@@ -54,7 +52,8 @@ fn main() {
             eprintln!("Inotify init/add_watch error: {err}"); 
             process::exit(1); 
     });
-    drop(cfg); //not needed, flow is stuck in event_loop and old cfg will be in mem if not dropped
+
+    drop(cfg);
 
     let sighup_fd = init_sighup().unwrap_or_else(|err| {
             eprintln!("Sighup init error: {err}"); 
@@ -66,14 +65,11 @@ fn main() {
             process::exit(1); 
     });
     
-    let _ = event_loop(inotify_state, sighup_fd, epoll_fd);
+    event_loop(inotify_state, sighup_fd, epoll_fd);
     
 }
 
-
-
-
-fn event_loop(mut inotify_state: InotifyState, sighup_fd: SignalFd, epoll_fd: Epoll) -> Result<(), Errno>{ 
+fn event_loop(mut inotify_state: InotifyState, sighup_fd: SignalFd, epoll_fd: Epoll) { 
     let mut events = [EpollEvent::empty(); 2]; //2 for sighup in buf
                                                
     loop{
@@ -81,7 +77,7 @@ fn event_loop(mut inotify_state: InotifyState, sighup_fd: SignalFd, epoll_fd: Ep
         for event in &events[..ctr]{
             match event.data(){
                 INOTIFY_EPOLL_TOKEN => run_script(&inotify_state)?, //Rc<>???
-                SIGHUP_EPOLL_TOKEN => reload_cfg(&sighup_fd, &mut inotify_state)?, 
+                SIGHUP_EPOLL_TOKEN => reload_cfg(&mut inotify_state)?, 
                 _ => unreachable!("Unknown epoll token"),
             }
         }
@@ -89,13 +85,17 @@ fn event_loop(mut inotify_state: InotifyState, sighup_fd: SignalFd, epoll_fd: Ep
     }
 }
 
-fn reload_cfg(sighup_fd: &SignalFd, inotify_state: &mut InotifyState) -> Result<(), Errno>{
-    //cfg lives in main
+fn reload_cfg(inotify_state: &mut InotifyState) -> Result<(), Errno>{
+    //init new cfg, check it
     //change wdtoscript on existing inotify fd in case cfg correct
-    //drop config in main after not needed to save mem
     //check new cfg -> return bs -> nogo
     //create new cfg instance, reinit wdtoscript on existing notify fd
     //exit fn, don't propagate anything to main since flow is not returned there
+    //THEN I DON'T ACTUALLY NEED THE OLD CFG
+    //BUT THE DIFF CONFIGS WILL BE NEEDED WHEN MORE THAN INOTIFY IS UPDATED
+    //AT THIS POINT JUST REMOVE WATCHES, ADD NEW ONES
+    //PROB LESS EXPENSIVE THAN DIFFING CFGS ANYWAYS
+    Ok(())
 }
 
 fn run_script(inotify_state: &InotifyState) -> Result<(), Errno>{
@@ -122,8 +122,7 @@ fn init_epoll(inotify_state: &InotifyState, sighup_fd: &SignalFd) -> Result<Epol
     Ok(epoll_fd)
 }
 
-
-fn init_inotify(cfg: &Cfg) -> Result<InotifyState, Errno>{
+fn init_inotify(cfg: &Cfg) -> Result<InotifyState, Errno>{ //rewrite
     let mut inotify_state = InotifyState{
         //leave nonblock even for LT epoll just to be safe
         inotify_fd: Inotify::init(InitFlags::IN_CLOEXEC | InitFlags::IN_NONBLOCK)?,
@@ -139,6 +138,11 @@ fn init_inotify(cfg: &Cfg) -> Result<InotifyState, Errno>{
     Ok(inotify_state)
 
 }
+
+fn update_inotify(inotify_state: &mut InotifyState) -> Result<(),Errno>{
+    Ok(())
+}
+
 
 fn init_sighup() -> Result<SignalFd, Errno> { //add struct for storing signalfds if several introduced
     let mut mask = SigSet::empty();
