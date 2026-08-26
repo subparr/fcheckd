@@ -16,31 +16,40 @@ use config::{Cfg, CfgEntry};
 
 use clap::Parser;
 mod args;
+use crate::args::CliArgs;    
 
 //fn reload + delete watches from wd_to_script on watch death
 //listen to IN_DELETE_SELF just for internal logic for wd_to_script?
-//fn run hook 
-//event loop
 //recursive on inotify init 
 //check flags on inotify init 
 //logs to stdout or file?
-//main before event loop successful init log + watched
 //action log on verbose?
 
 const INOTIFY_EPOLL_TOKEN: u64 = 0;
 const SIGHUP_EPOLL_TOKEN: u64 = 1;
+const EPOLL_BUF_LEN: usize = 2;
 
 struct InotifyState {
     inotify_fd: Inotify,
     wd_to_script: HashMap<WatchDescriptor, PathBuf>,
 }
 
-//store config in mem for cfg reload on wrong config + fn for reload 
+impl InotifyState {
+    fn del_watches(&mut self) {
+        for (wd, _) in self.wd_to_script.drain() {
+                self.inotify_fd.rm_watch(wd).unwrap_or_else(|err| {
+                    eprintln!("Error removing watch: {err}") //EINVAL, can happen on move/delete
+                });
+            }
+    }
+
+}
+
 fn main() {
     let cli_args = args::CliArgs::parse();
-    let cfg = Cfg::init(cli_args.config).unwrap_or_else(|err| {
+    let cfg = Cfg::init(cli_args.config.as_deref()).unwrap_or_else(|err| {
             eprintln!("Error parsing config: {err}");
-            process::exit(1); //drops the process on cfg reload if logic is reused for it, rewrite
+            process::exit(1);
     });
 
     if cli_args.check_config {
@@ -53,8 +62,6 @@ fn main() {
             process::exit(1); 
     });
 
-    drop(cfg);
-
     let sighup_fd = init_sighup().unwrap_or_else(|err| {
             eprintln!("Sighup init error: {err}"); 
             process::exit(1); 
@@ -65,37 +72,24 @@ fn main() {
             process::exit(1); 
     });
     
-    event_loop(inotify_state, sighup_fd, epoll_fd);
+    event_loop(inotify_state, sighup_fd, epoll_fd, cli_args, cfg);
     
 }
 
-fn event_loop(mut inotify_state: InotifyState, sighup_fd: SignalFd, epoll_fd: Epoll) { 
-    let mut events = [EpollEvent::empty(); 2]; //2 for sighup in buf
+fn event_loop(mut inotify_state: InotifyState, sighup_fd: SignalFd, epoll_fd: Epoll, cli_args: CliArgs, mut cfg: Cfg) { 
+    let mut events = [EpollEvent::empty(); EPOLL_BUF_LEN];
                                                
     loop{
-        let ctr = epoll_fd.wait(&mut events, EpollTimeout::NONE)?; //blocks here until events
+        let ctr = epoll_fd.wait(&mut events, EpollTimeout::NONE).unwrap(); //blocks here until events 
         for event in &events[..ctr]{
             match event.data(){
-                INOTIFY_EPOLL_TOKEN => run_script(&inotify_state)?, //Rc<>???
-                SIGHUP_EPOLL_TOKEN => reload_cfg(&mut inotify_state)?, 
+                INOTIFY_EPOLL_TOKEN => run_script(&inotify_state).unwrap(), //RESOLVE UNWRAPS + gets
+                                                                            //IN_IGNORED?
+                SIGHUP_EPOLL_TOKEN => cfg = reload_cfg(&mut inotify_state, &cli_args, cfg),
                 _ => unreachable!("Unknown epoll token"),
             }
         }
-
     }
-}
-
-fn reload_cfg(inotify_state: &mut InotifyState) -> Result<(), Errno>{
-    //init new cfg, check it
-    //change wdtoscript on existing inotify fd in case cfg correct
-    //check new cfg -> return bs -> nogo
-    //create new cfg instance, reinit wdtoscript on existing notify fd
-    //exit fn, don't propagate anything to main since flow is not returned there
-    //THEN I DON'T ACTUALLY NEED THE OLD CFG
-    //BUT THE DIFF CONFIGS WILL BE NEEDED WHEN MORE THAN INOTIFY IS UPDATED
-    //AT THIS POINT JUST REMOVE WATCHES, ADD NEW ONES
-    //PROB LESS EXPENSIVE THAN DIFFING CFGS ANYWAYS
-    Ok(())
 }
 
 fn run_script(inotify_state: &InotifyState) -> Result<(), Errno>{
@@ -113,34 +107,61 @@ fn run_script(inotify_state: &InotifyState) -> Result<(), Errno>{
     }
 }
 
+fn reload_cfg(inotify_state: &mut InotifyState, cli_args: &CliArgs, cfg_old: Cfg) -> Cfg{
+    let cfg = match Cfg::init(cli_args.config.as_deref()) {
+        Ok(cfg_new) => cfg_new,
+        Err(err) => {
+            eprintln!("Error parsing new config, reloading with the previous one: {err}");
+            cfg_old
+        },
+    };
+
+    update_inotify(inotify_state, &cfg);
+    cfg  
+}
+
+fn init_inotify(cfg: &Cfg) -> Result<InotifyState, Errno> { //rewrite as impl for InotifyState??
+    let mut inotify_state = InotifyState{
+        inotify_fd: Inotify::init(InitFlags::IN_CLOEXEC | InitFlags::IN_NONBLOCK)?,
+        wd_to_script: HashMap::new(),
+    };
+
+    inotify_fill_from_cfg(&mut inotify_state, cfg);
+    Ok(inotify_state)
+}
+
+fn update_inotify(inotify_state: &mut InotifyState, cfg: &Cfg) {
+    inotify_state.del_watches();
+    inotify_fill_from_cfg(inotify_state, cfg);
+}
+
+fn inotify_fill_from_cfg(inotify_state: &mut InotifyState, cfg: &Cfg) {
+    for entry in &cfg.entry{
+        match inotify_state.inotify_fd.add_watch(&entry.path, entry.events){
+            Ok(wd) => {
+                inotify_state.wd_to_script.insert(wd, entry.path.clone());
+            },
+            Err(err) => {
+                eprintln!("Error adding watch for {:?}: {err}.", entry.path)
+            },
+        }
+    }
+    let active = inotify_state.wd_to_script.len();
+    let total = cfg.entry.len();
+    if active < total {
+        eprintln!("Warning: {active}/{total} watches active");
+    }
+}
+
+
 fn init_epoll(inotify_state: &InotifyState, sighup_fd: &SignalFd) -> Result<Epoll, Errno>{
+
     let epoll_fd = Epoll::new(EpollCreateFlags::EPOLL_CLOEXEC)?;
 
     epoll_fd.add(&inotify_state.inotify_fd, EpollEvent::new(EpollFlags::EPOLLIN, INOTIFY_EPOLL_TOKEN))?;
     epoll_fd.add(sighup_fd, EpollEvent::new(EpollFlags::EPOLLIN, SIGHUP_EPOLL_TOKEN))?;
 
     Ok(epoll_fd)
-}
-
-fn init_inotify(cfg: &Cfg) -> Result<InotifyState, Errno>{ //rewrite
-    let mut inotify_state = InotifyState{
-        //leave nonblock even for LT epoll just to be safe
-        inotify_fd: Inotify::init(InitFlags::IN_CLOEXEC | InitFlags::IN_NONBLOCK)?,
-        wd_to_script: HashMap::new(),
-    };
-
-    for entry in &cfg.entry{
-        let cycle_wd = inotify_state.inotify_fd.
-            add_watch(&entry.path, entry.events)?;
-        inotify_state.wd_to_script.
-           insert(cycle_wd, entry.path.clone()); 
-    }
-    Ok(inotify_state)
-
-}
-
-fn update_inotify(inotify_state: &mut InotifyState) -> Result<(),Errno>{
-    Ok(())
 }
 
 

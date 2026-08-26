@@ -1,5 +1,5 @@
 use serde::{Deserialize, Deserializer};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::fs::File;
 use std::io::Read;
 use nix::sys::inotify::AddWatchFlags;
@@ -25,9 +25,9 @@ pub struct CfgEntry {
 //fallback to default on cfg unavailability, not only based on hierarchy, ie check every one and
 //handle cfg read in config module function
 impl Cfg {
-    pub fn init(cli_config_path: Option<PathBuf>) -> Result<Self, Box<dyn std::error::Error>> {
+    pub fn init(cli_config_path: Option<&Path>) -> Result<Self, Box<dyn std::error::Error>> {
         let config_in_use = match cli_config_path {
-            Some(path) => path,     
+            Some(path) => path.to_path_buf(),     
             None => {
                 match home_config_path() {
                     Some(path) => path,
