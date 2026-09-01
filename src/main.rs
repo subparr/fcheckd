@@ -150,7 +150,7 @@ fn handle_inotify(inotify_state: &InotifyState) {
                     match command.spawn(){
                         Ok(_) => {},
                         Err(err) => {
-                            eprintln!("Error spawning a child script: {err}");
+                            eprintln!("Error spawning a child script {script:?}: {err}");
                         },
                     };
 
@@ -225,9 +225,9 @@ fn update_inotify(inotify_state: &mut InotifyState, cfg: &Cfg) {
 //continue on error and log it to stderr
 fn inotify_fill_from_cfg(inotify_state: &mut InotifyState, cfg: &Cfg) {
     for entry in &cfg.entry{
-        match inotify_state.inotify_fd.add_watch(&entry.path, entry.events){
+        match inotify_state.inotify_fd.add_watch(&entry.script, entry.events){
             Ok(wd) => {
-                inotify_state.wd_to_script.insert(wd, entry.path.clone());
+                inotify_state.wd_to_script.insert(wd, entry.script.clone());
             },
             Err(err) => {
                 eprintln!("Error adding watch for {:?}: {err}.", entry.path)

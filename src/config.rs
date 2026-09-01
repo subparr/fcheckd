@@ -31,7 +31,7 @@ impl Cfg {
             None => {
                 match home_config_path() {
                     Some(path) => path,
-                    None => PathBuf::from("/etc/fchekd/config.toml")
+                    None => PathBuf::from("/etc/fcheckd/config.toml")
                 }
             }
         };
@@ -47,7 +47,7 @@ impl Cfg {
 
 
 fn home_config_path() -> Option<PathBuf> {
-    let defconf_home_path = ".config/fchekd/config.toml";
+    let defconf_home_path = ".config/fcheckd/config.toml";
     match std::env::var_os("HOME") {
         Some(home_path) => Some(PathBuf::from(home_path).join(defconf_home_path)),
         None => None,
