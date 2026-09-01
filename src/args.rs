@@ -11,7 +11,7 @@ pub struct CliArgs {
     pub config: Option<PathBuf>,
 
     ///Check config, report to stdout and exit
-    #[arg(short = 'r', long)]
+    #[arg(short = 'e', long)]
     pub check_config: bool
 }
 
