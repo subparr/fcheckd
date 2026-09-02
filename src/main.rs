@@ -1,34 +1,36 @@
-#![allow(dead_code)]
-#![allow(unused_imports)]
-#![allow(unused_variables)]
-
 #![allow(clippy::zombie_processes)]
 
 use std::process;
-use nix::sys::inotify::{Inotify, AddWatchFlags, InitFlags, InotifyEvent, WatchDescriptor};
+use nix::sys::inotify::{Inotify, AddWatchFlags, InitFlags, WatchDescriptor};
 use std::collections::HashMap;
 use nix::sys::epoll::{Epoll, EpollEvent, EpollCreateFlags, EpollFlags, EpollTimeout};
 use nix::errno::Errno;
 use std::path::PathBuf;
-use nix::sys::signal::{SigSet, Signal, sigprocmask, SigmaskHow};
+use nix::sys::signal::{Signal, sigprocmask, SigmaskHow};
 use nix::sys::signalfd::{SignalFd, SfdFlags};
-use std::process::{Command, Child, Stdio};
+use std::process::{Command, Stdio};
 use std::os::unix::process::CommandExt;
 use nix::sys::wait::{waitpid, WaitPidFlag, WaitStatus};
 use nix::unistd::Pid;
 
 mod config;
-use config::{Cfg, CfgEntry};
+use config::Cfg;
 
 use clap::Parser;
 mod args;
 use crate::args::CliArgs;    
 
-//handle IN_Q_OVERFLOW on wd -1
-//recursive on inotify init for dirs 
+mod logger;
+use logger::Logger;
+
+//recursive on inotify init for dirs
 //logs to file? /var/log/fcheckd/err_log and all_log
-//comprehensive logging
-//action log on verbose?
+//logger
+//rewrite init config, let it store the state not to pass args around
+//verbose
+//actual help
+//readme
+//license
 
 const INOTIFY_EPOLL_TOKEN: u64 = 0;
 const SIGNAL_EPOLL_TOKEN: u64 = 1;
@@ -120,11 +122,14 @@ fn handle_inotify(inotify_state: &InotifyState) {
                     if event.mask.contains(AddWatchFlags::IN_IGNORED) {
                         continue;
                     }
+                    if event.mask.contains(AddWatchFlags::IN_Q_OVERFLOW) {
+                       eprintln!("Inotify event queue is overflowed. Some events may be dropped"); 
+                    }
                     
                     let script = match inotify_state.wd_to_script.get(&event.wd){
                         Some(script) => script,
                         None => {
-                            eprintln!("No script path found for inotify wd. Skipping."); //Internal?
+                            eprintln!("No script path found for inotify wd. Skipping"); //Internal?
                             continue;
                         },
                     };
@@ -132,7 +137,7 @@ fn handle_inotify(inotify_state: &InotifyState) {
                     let mut command = Command::new(script);
                     command
                         .stdin(Stdio::null())
-//                        .stdout(Stdio::null())
+                        .stdout(Stdio::null())
                         .stderr(Stdio::null());
                     
                     let unblock_mask = Signal::SIGHUP | Signal::SIGCHLD;
@@ -195,7 +200,6 @@ fn handle_signalfd(signal_fd: &mut SignalFd, inotify_state: &mut InotifyState, c
     }
 }
 
-//ambatu blow watafak loops
 fn handle_children(){
     loop{
         match waitpid(Pid::from_raw(-1), Some(WaitPidFlag::WNOHANG)){
@@ -273,4 +277,3 @@ fn init_signals() -> Result<SignalFd, Errno> {
     let signal_fd = SignalFd::with_flags(&mask, SfdFlags::SFD_CLOEXEC | SfdFlags::SFD_NONBLOCK)?;
     Ok(signal_fd)
 }
-
