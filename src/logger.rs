@@ -7,6 +7,9 @@ use std::fs::OpenOptions;
 use std::io::Write;
 use chrono::Local;
 
+//DO create a log file if non existent
+//parent directories will NOT be created
+
 static LOGGER: OnceLock<Logger> = OnceLock::new();
 
 #[derive(Debug)]
@@ -29,12 +32,12 @@ impl Logger {
         LOGGER.set(Self {verbose, file_log_fd}).expect("Logger already initialised");
     }
     
-    pub fn fatal(message: impl Display){
+    pub fn fatal(message: impl Display) -> ! {
         Self::instance().write(true, message);
         process::exit(1);
     }
 
-    pub fn error(message: impl Display){
+    pub fn error(message: impl Display) {
         Self::instance().write(true, message);
     }
 

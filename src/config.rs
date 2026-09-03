@@ -2,15 +2,20 @@ use serde::{Deserialize, Deserializer};
 use std::path::{Path, PathBuf};
 use std::fs::File;
 use std::io::Read;
+use std::fs::OpenOptions;
+use std::fs::create_dir_all;
 use nix::sys::inotify::AddWatchFlags;
 
-//consume args, store the needed -c value if exists
-//rewrite to use OpenOptions to create default cfg under /etc + a dir
+//create default cfg paths with install script or systemd unit file opt
+//not a job for the daemon itself as complicates the logic + possible permission problems
+//on non_existent path report to stderr and exit
 
 #[derive(Deserialize)]
 pub struct Cfg {
     #[serde(rename = "watch")]
     pub entry: Vec<CfgEntry>,
+    #[serde(skip)]
+    pub cli_config_path: Option<PathBuf>,
 }
 
 #[derive(Deserialize)]
@@ -24,25 +29,25 @@ pub struct CfgEntry {
     pub events: AddWatchFlags,
 }
 
-//fallback to default on cfg unavailability, not only based on hierarchy, ie check every one and
-//handle cfg read in config module function
 impl Cfg {
-    pub fn init(cli_config_path: Option<&Path>) -> Result<Self, Box<dyn std::error::Error>> {
+    pub fn init(cli_config_path: &Option<PathBuf>) -> Result<Self, Box<dyn std::error::Error>> {
         let config_in_use = match cli_config_path {
-            Some(path) => path.to_path_buf(),     
+            Some(path) => path,
             None => {
-                match home_config_path() {
+                &match home_config_path() {
                     Some(path) => path,
                     None => PathBuf::from("/etc/fcheckd/config.toml")
                 }
             }
         };
-
-        let mut fd = File::open(config_in_use)?;
+        
+        let mut fd = OpenOptions::new().read(true).open(config_in_use)?;
         let mut cfg_contents = String::new();
         fd.read_to_string(&mut cfg_contents)?;
         
-        Ok(toml::from_str(&cfg_contents)?)
+        let mut cfg_instance: Cfg = toml::from_str(&cfg_contents)?;
+        cfg_instance.cli_config_path = cli_config_path.clone(); //ew, but it's cheap
+        Ok(cfg_instance)
 
         }
     }
