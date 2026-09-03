@@ -4,6 +4,8 @@ use std::fs::File;
 use std::io::Read;
 use nix::sys::inotify::AddWatchFlags;
 
+//consume args, store the needed -c value if exists
+//rewrite to use OpenOptions to create default cfg under /etc + a dir
 
 #[derive(Deserialize)]
 pub struct Cfg {

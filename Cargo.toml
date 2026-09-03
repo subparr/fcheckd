@@ -2,9 +2,11 @@
 name = "fcheckd"
 version = "0.1.0"
 edition = "2024"
+license = "GPL-3.0-only"
 
 [dependencies]
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
 clap = { version = "4.6.6", features = ["derive"] }
-nix = { version = "0.31.3", features = ["event", "inotify"] }
+nix = { version = "0.31.3", features = ["event", "inotify", "signal"] }
 serde = { version = "1.0.229", features = ["derive"] }
 toml = "1.1.4"

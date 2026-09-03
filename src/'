@@ -1,6 +1,6 @@
 #![allow(clippy::zombie_processes)]
-#![allow(unused)]
 
+use std::sync::LazyLock;
 use std::process;
 use nix::sys::inotify::{Inotify, AddWatchFlags, InitFlags, WatchDescriptor};
 use std::collections::HashMap;
@@ -24,6 +24,8 @@ use args::CliArgs;
 mod logger;
 use logger::Logger;
 
+static ARGS: LazyLock<CliArgs> = LazyLock::new(|| CliArgs::parse());
+static LOGGER: LazyLock<Logger> = LazyLock::new(|| Logger::init(ARGS.verbose));
 
 //recursive on inotify init for dirs
 //logs to file? /var/log/fcheckd/err_log and all_log
@@ -39,7 +41,6 @@ use logger::Logger;
 const INOTIFY_EPOLL_TOKEN: u64 = 0;
 const SIGNAL_EPOLL_TOKEN: u64 = 1;
 const EPOLL_BUF_LEN: usize = 2;
-
 
 //wd_to_script may contain invalid entries after move/delete/umount
 //but events will not be registered for those files after the invalidation
@@ -63,16 +64,12 @@ impl InotifyState {
 }
 
 fn main() {
-    let cli_args = CliArgs::parse();
-
-    Logger::init(cli_args.verbose, cli_args.log_file); //resolve config init not to drag args
-
     let cfg = Cfg::init(cli_args.config.as_deref()).unwrap_or_else(|err| {
             eprintln!("Error parsing config: {err}");
             process::exit(1);
     });
 
-    if cli_args.check_config {
+    if ARGS.check_config {
         println!("OK!");
         process::exit(0);
     }
