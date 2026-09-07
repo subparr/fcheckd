@@ -21,8 +21,12 @@ pub struct Cfg {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct CfgEntry {
+
     pub path: PathBuf,
-    pub recursive: Option<bool>,
+
+    #[serde(default)]
+    pub recursive: bool,
+
     pub script: PathBuf,
 
     #[serde(deserialize_with = "deserialize_events")]
@@ -73,7 +77,7 @@ where
         let upper = format!("IN_{}", name.to_uppercase());               
         match AddWatchFlags::from_name(&upper) {
             Some(flag) => mask |= flag,
-            None => return Err(serde::de::Error::custom(format!("unknown inotify event: {name}"))),
+            None => return Err(serde::de::Error::custom(format!("Unknown inotify event: {name}"))),
         }
     }
 

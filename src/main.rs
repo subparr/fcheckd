@@ -6,7 +6,7 @@ use nix::sys::inotify::{Inotify, AddWatchFlags, InitFlags, WatchDescriptor};
 use std::collections::HashMap;
 use nix::sys::epoll::{Epoll, EpollEvent, EpollCreateFlags, EpollFlags, EpollTimeout};
 use nix::errno::Errno;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use nix::sys::signal::{Signal, sigprocmask, SigmaskHow};
 use nix::sys::signalfd::{SignalFd, SfdFlags};
 use std::process::{Command, Stdio};
@@ -26,10 +26,16 @@ use logger::Logger;
 
 
 //recursive on inotify init for dirs
+//recursive Option<bool>
 //readme
 //license
+//exclude features
+//copyrights
 //cargo deny 
 //cargo audit
+//cargo AUR + cargo deb + install.sh
+//systemd unit file
+//openrc service file
 
 const INOTIFY_EPOLL_TOKEN: u64 = 0;
 const SIGNAL_EPOLL_TOKEN: u64 = 1;
@@ -224,22 +230,80 @@ fn update_inotify(inotify_state: &mut InotifyState, cfg: &Cfg) {
 }
 
 //continue on error and log it to stderr
+//also reimplement with Rc and Path and no vec
+//what the fuck is that
+//also maybe fix symlink resolving and path validation
+//on deser
 fn inotify_fill_from_cfg(inotify_state: &mut InotifyState, cfg: &Cfg) {
-    for entry in &cfg.entry{
-        match inotify_state.inotify_fd.add_watch(&entry.path, entry.events){
-            Ok(wd) => {
-                inotify_state.wd_to_script.insert(wd, entry.script.clone());
-            },
-            Err(err) => Logger::error(format!("Error adding watch for {:?}: {err}", entry.path))
+    //count total amount of watches that SHOULD be addeed
+    let mut total = 0;
+
+    for entry in &cfg.entry {
+        let mut objs_to_watch = vec![entry.path.clone()]; //vec heap + clone bad
+        
+        //cleanup symlinks as they will get traversed here upon resolving dir,
+        //not true for FileType.is_dir() below as it does NOT traverse symlinks
+        if entry.recursive && entry.path.is_dir() && !entry.path.is_symlink(){
+            objs_to_watch.extend(recursive_dir_walk(&entry.path).unwrap_or_default()) //dirs in objs
         }
+
+        total += objs_to_watch.len();
+
+        for obj in objs_to_watch {
+            match inotify_state.inotify_fd.add_watch(&obj, entry.events | AddWatchFlags::IN_DONT_FOLLOW){
+                Ok(wd) => {
+                    inotify_state.wd_to_script.insert(wd, entry.script.clone()); //make it & too
+                },
+                Err(err) => Logger::error(format!("Error adding watch for {:?}: {err}", &obj))
+            }
+        }
+
     }
+    
+    //does not represent failed subdirs in case of recursive = true, see 
+    //log errors from them
     let active = inotify_state.wd_to_script.len();
-    let total = cfg.entry.len();
     if active < total {
         Logger::error(format!("Warning: {active}/{total} watches active"));
     }
 }
 
+//not including the initial dir
+//does NOT traverse symlinks
+fn recursive_dir_walk(path: &Path) -> Option<Vec<PathBuf>> {
+
+    let mut ret: Vec<PathBuf> = Vec::new();
+
+    let path_iter = match path.read_dir(){
+        Ok(iter) => iter,
+        Err(err) => {
+            Logger::error(format!("Failed to read {path:?}: {err}"));
+            return None;
+        }
+    };
+
+    for obj in path_iter{
+        let obj = match obj {
+            Ok(obj) => obj,
+            Err(err) => { 
+                Logger::error(format!("Failed to read {path:?}: {err}"));
+                continue;
+            }
+        };
+
+        if let Ok(filetype) = obj.file_type() {
+            //is_dir does not resolve symlinks
+            if filetype.is_dir() {
+                let path = obj.path();
+                ret.extend(recursive_dir_walk(&path).unwrap_or_default());
+            }
+        } else {
+            Logger::error(format!("Failed to get filetype for {:?}", obj.path()));
+            continue;
+        }
+    }
+    Some(ret)
+}
 
 //don't check for directory specific flags as they get ignored and vice versa for
 //file specifi flags on dirs
