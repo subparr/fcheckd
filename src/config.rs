@@ -1,13 +1,14 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 subparr <subparr@tuta.io>
+
 use serde::{Deserialize, Deserializer};
-use std::path::{Path, PathBuf};
-use std::fs::File;
+use std::path::PathBuf;
 use std::io::Read;
 use std::fs::OpenOptions;
-use std::fs::create_dir_all;
 use nix::sys::inotify::AddWatchFlags;
 use std::rc::Rc;
 
-//create default cfg paths with install script or systemd unit file opt
+//Create default cfg paths with install script or systemd unit file opt
 //not a job for the daemon itself as complicates the logic + possible permission problems
 //on non_existent path report to stderr and exit
 

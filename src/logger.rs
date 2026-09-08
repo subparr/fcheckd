@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 subparr <subparr@tuta.io>
+
 use std::process;
 use std::fmt::Display;
 use std::sync::OnceLock;

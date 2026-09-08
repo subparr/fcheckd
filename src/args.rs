@@ -1,9 +1,15 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 subparr <subparr@tuta.io>
+
 use clap::Parser;
 use std::path::PathBuf;
 
-
+//report bugs to
+//manpage
 #[derive(Parser)]
-#[command(version, about)]
+#[command(version, about= "Watch files and react to their changes",
+    after_help = "Report bugs to subparr@tuta.io\nFor more details see fcheckd(1)")]
+
 pub struct CliArgs {
     
     ///Path to config

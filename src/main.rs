@@ -1,5 +1,10 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// Copyright (C) 2026 subparr <subparr@tuta.io>
+
+//child processess are not waited on through handle which Command::spawn()
+//returns but rather through manual waitpid() syscall
+//to not block the thread
 #![allow(clippy::zombie_processes)]
-#![allow(unused)]
 
 use std::process;
 use nix::sys::inotify::{Inotify, AddWatchFlags, InitFlags, WatchDescriptor};
@@ -27,8 +32,8 @@ mod logger;
 use logger::Logger;
 
 
+
 //readme
-//license
 //exclude features
 //copyrights
 //cargo deny 
@@ -153,9 +158,6 @@ fn handle_inotify(inotify_state: &InotifyState) {
                         });
                     }
 
-                    //don't listen to fucking clippy, it doesn't know shit,
-                    //process is waited on down the line when it's finished
-                    //to not block the single thread this daemon barely hangs on
                     match command.spawn(){
                         Ok(_) => {},
                         Err(err) => {
