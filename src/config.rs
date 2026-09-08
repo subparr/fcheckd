@@ -5,6 +5,7 @@ use std::io::Read;
 use std::fs::OpenOptions;
 use std::fs::create_dir_all;
 use nix::sys::inotify::AddWatchFlags;
+use std::rc::Rc;
 
 //create default cfg paths with install script or systemd unit file opt
 //not a job for the daemon itself as complicates the logic + possible permission problems
@@ -22,12 +23,14 @@ pub struct Cfg {
 #[serde(deny_unknown_fields)]
 pub struct CfgEntry {
 
+    #[serde(deserialize_with = "deserialize_check_path")]
     pub path: PathBuf,
 
     #[serde(default)]
     pub recursive: bool,
 
-    pub script: PathBuf,
+    #[serde(deserialize_with = "deserialize_check_script")]
+    pub script: Rc<PathBuf>,
 
     #[serde(deserialize_with = "deserialize_events")]
     pub events: AddWatchFlags,
@@ -84,3 +87,35 @@ where
     Ok(mask)
 }
 
+//enfore absolute existing scripts on cfg validation
+fn deserialize_check_script<'de, D>(deserializer: D) -> Result<Rc<PathBuf>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let script = PathBuf::deserialize(deserializer)?;
+    if !script.is_absolute() {
+        return Err(serde::de::Error::custom(format!("Path must be absolute: {script:?}")));
+    }
+
+    if !script.exists() {
+        return Err(serde::de::Error::custom(format!("Script does not exist: {script:?}")));
+    }
+
+    Ok(Rc::new(script))
+}
+
+fn deserialize_check_path<'de, D>(deserializer: D) -> Result<PathBuf, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let path = PathBuf::deserialize(deserializer)?;
+    if !path.is_absolute() {
+        return Err(serde::de::Error::custom(format!("Path must be absolute: {path:?}")));
+    }
+
+    if !path.exists() {
+        return Err(serde::de::Error::custom(format!("Watched object does not exist: {path:?}")));
+    }
+
+    Ok(path)
+}
