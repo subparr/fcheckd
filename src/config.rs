@@ -91,13 +91,23 @@ where
     D: Deserializer<'de>,
 {
     let script = PathBuf::deserialize(deserializer)?;
+
     if !script.is_absolute() {
         return Err(serde::de::Error::custom(format!("Path must be absolute: {script:?}")));
     }
-
-    if !script.exists() {
-        return Err(serde::de::Error::custom(format!("Script does not exist: {script:?}")));
-    }
+    
+    //resolving path if it is a symlink for initial add_watch, 
+    //further symlinks under the dir (in case watched object IS a dir)
+    //will not be resolved intentionally i.e. IN_NO_FOLLOW inotify flag
+    let script = match script.canonicalize() {
+        Ok(script) => script,
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+            return Err(serde::de::Error::custom(format!("Script does not exist: {script:?}")));
+        }
+        Err(err) => {
+            return Err(serde::de::Error::custom(format!("Failed to canonicalize path {script:?}: {err}")));
+        }
+    }; //handle perm denied?
 
     Ok(Rc::new(script))
 }
@@ -107,13 +117,20 @@ where
     D: Deserializer<'de>,
 {
     let path = PathBuf::deserialize(deserializer)?;
+
     if !path.is_absolute() {
         return Err(serde::de::Error::custom(format!("Path must be absolute: {path:?}")));
     }
 
-    if !path.exists() {
-        return Err(serde::de::Error::custom(format!("Watched object does not exist: {path:?}")));
-    }
+    let path = match path.canonicalize() {
+        Ok(path) => path,
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+            return Err(serde::de::Error::custom(format!("Watched object does not exist: {path:?}")));
+        }
+        Err(err) => {
+            return Err(serde::de::Error::custom(format!("Failed to canonicalize path {path:?}: {err}")));
+        }
+    };
 
     Ok(path)
 }

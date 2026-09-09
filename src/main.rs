@@ -181,11 +181,11 @@ fn handle_signalfd(signal_fd: &mut SignalFd, inotify_state: &mut InotifyState, c
                 Some(signal) => {
                     match Signal::try_from(signal.ssi_signo as i32) {
                         Ok(Signal::SIGHUP) => {
-                            Logger::info(format!("Received SIGHUP, reloading config"));
+                            Logger::info("Received SIGHUP, reloading config");
                             reload_cfg(inotify_state, cfg);
                         }
                         Ok(Signal::SIGCHLD) => {
-                            Logger::info(format!("Received SIGCHLD, reaping child"));
+                            Logger::info("Received SIGCHLD, reaping child");
                             handle_children();
                         }
                         Ok(other) => {
@@ -284,8 +284,8 @@ fn recursive_dir_walk(path: &Path) -> Option<Vec<PathBuf>> {
             //is_dir does not resolve symlinks
             if filetype.is_dir() {
                 let path = obj.path();
-                ret.push(path.clone());
                 ret.extend(recursive_dir_walk(&path).unwrap_or_default());
+                ret.push(path);
             }
         } else {
             Logger::error(format!("Failed to get filetype for {:?}", obj.path()));
