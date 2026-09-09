@@ -86,9 +86,10 @@ fn main() {
     let epoll_fd = init_epoll(&inotify_state, &signal_fd).unwrap_or_else(|err| {
         Logger::fatal(format!("Epoll init error: {err}"));
     });
+
+    Logger::info("Initialisation successfull, started waiting for events");
     
     event_loop(inotify_state, signal_fd, epoll_fd, cfg);
-    
 }
 
 fn event_loop(mut inotify_state: InotifyState, mut signal_fd: SignalFd, epoll_fd: Epoll, mut cfg: Cfg) { 
@@ -122,10 +123,11 @@ fn handle_inotify(inotify_state: &InotifyState) {
                     //IN_ONESHOT caused script to fire twice because existing 
                     //wd_to_script entry, ignore signal omitted by rm_watch
                     if event.mask.contains(AddWatchFlags::IN_IGNORED) {
+                        Logger::error(format!("IN_IGNORE received on {event:?}! File will NOT be watched."));
                         continue;
                     }
                     if event.mask.contains(AddWatchFlags::IN_Q_OVERFLOW) {
-                       eprintln!("Inotify event queue is overflowed. Some events may be dropped"); 
+                       Logger::error("Inotify event queue is overflowed. Some events may be dropped"); 
                     }
                     
                     let script = match inotify_state.wd_to_script.get(&event.wd){
@@ -150,6 +152,8 @@ fn handle_inotify(inotify_state: &InotifyState) {
                                 .map_err(std::io::Error::from)
                         });
                     }
+                    
+                    Logger::info(format!("Received event, starting script {script:?}"));
 
                     match command.spawn(){
                         Ok(_) => {},
@@ -177,9 +181,11 @@ fn handle_signalfd(signal_fd: &mut SignalFd, inotify_state: &mut InotifyState, c
                 Some(signal) => {
                     match Signal::try_from(signal.ssi_signo as i32) {
                         Ok(Signal::SIGHUP) => {
-                            reload_cfg(inotify_state, cfg);     
+                            Logger::info(format!("Received SIGHUP, reloading config"));
+                            reload_cfg(inotify_state, cfg);
                         }
                         Ok(Signal::SIGCHLD) => {
+                            Logger::info(format!("Received SIGCHLD, reaping child"));
                             handle_children();
                         }
                         Ok(other) => {
@@ -244,6 +250,7 @@ fn inotify_fill_from_cfg(inotify_state: &mut InotifyState, cfg: &Cfg) {
             match inotify_state.inotify_fd.add_watch(obj, entry.events | AddWatchFlags::IN_DONT_FOLLOW) {
                 Ok(wd) => {
                     inotify_state.wd_to_script.insert(wd, Rc::clone(&entry.script));
+                    Logger::info(format!("Added watch for {:?}", &entry.path));
                 }
                 Err(err) => Logger::error(format!("Error adding watch for {obj:?}: {err}")),
             }
