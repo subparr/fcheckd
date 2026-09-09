@@ -24,6 +24,10 @@ pub struct CliArgs {
     ///Write log to a file instead of stderr/stdout
     #[arg(short = 'l', long)]
     pub log_file: Option<PathBuf>,
+
+    ///Watch inode instead of file
+    #[arg(short = 'i', long)]
+    pub inode_watch: bool,
 }
 
 

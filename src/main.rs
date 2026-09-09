@@ -123,7 +123,7 @@ fn handle_inotify(inotify_state: &InotifyState) {
                     //IN_ONESHOT caused script to fire twice because existing 
                     //wd_to_script entry, ignore signal omitted by rm_watch
                     if event.mask.contains(AddWatchFlags::IN_IGNORED) {
-                        Logger::error(format!("IN_IGNORE received on {event:?}! File will NOT be watched."));
+                        Logger::error(format!("IN_IGNORE received on {event:?}! File will NOT be watched.")); //file new watch, add cfg opt
                         continue;
                     }
                     if event.mask.contains(AddWatchFlags::IN_Q_OVERFLOW) {
@@ -250,7 +250,7 @@ fn inotify_fill_from_cfg(inotify_state: &mut InotifyState, cfg: &Cfg) {
             match inotify_state.inotify_fd.add_watch(obj, entry.events | AddWatchFlags::IN_DONT_FOLLOW) {
                 Ok(wd) => {
                     inotify_state.wd_to_script.insert(wd, Rc::clone(&entry.script));
-                    Logger::info(format!("Added watch for {:?}", &entry.path));
+                    Logger::info(format!("Added watch for {:?}", obj));
                 }
                 Err(err) => Logger::error(format!("Error adding watch for {obj:?}: {err}")),
             }
@@ -284,6 +284,7 @@ fn recursive_dir_walk(path: &Path) -> Option<Vec<PathBuf>> {
             //is_dir does not resolve symlinks
             if filetype.is_dir() {
                 let path = obj.path();
+                ret.push(path.clone());
                 ret.extend(recursive_dir_walk(&path).unwrap_or_default());
             }
         } else {
