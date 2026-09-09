@@ -63,10 +63,7 @@ impl Cfg {
 
 fn home_config_path() -> Option<PathBuf> {
     let defconf_home_path = ".config/fcheckd/config.toml";
-    match std::env::var_os("HOME") {
-        Some(home_path) => Some(PathBuf::from(home_path).join(defconf_home_path)),
-        None => None,
-    }
+    std::env::var_os("HOME").map(|home_path| PathBuf::from(home_path).join(defconf_home_path))
 }
 
 

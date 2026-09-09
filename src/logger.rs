@@ -22,9 +22,10 @@ pub struct Logger {
 }
 
 impl Logger {
-    pub fn init(verbose: bool, file_log_path: Option<PathBuf>) {
-
-        let file_log_fd = file_log_path.map(|path| {
+    //clone on init for no partial moved stated on cli_args as
+    //it needs to get dropped and gets dropped in main
+    pub fn init(verbose: bool, file_log_path: &Option<PathBuf>) {
+        let file_log_fd = file_log_path.clone().map(|path| {
             OpenOptions::new().append(true).create(true).open(path)
             .unwrap_or_else(|err| {
                 eprintln!("Failed opening/creating log file: {err}");
@@ -60,7 +61,9 @@ impl Logger {
     fn write(&self, to_stderr: bool, message: impl Display) {
         match &self.file_log_fd{
             Some(fd) => {
-                 writeln!(&*fd, "[{}] {message}", Self::timestamp()); //hacky
+                 if let Err(err) = writeln!(&*fd, "[{}] {message}", Self::timestamp()) {
+                     eprintln!("Error writing log to file: {err}")
+                 } 
             },
             None => {
                  if to_stderr{

@@ -4,6 +4,7 @@
 //child processess are not waited on through handle which Command::spawn()
 //returns but rather through manual waitpid() syscall
 //to not block the thread
+//so the warning gets disregarded
 #![allow(clippy::zombie_processes)]
 
 use std::process;
@@ -31,17 +32,6 @@ use args::CliArgs;
 mod logger;
 use logger::Logger;
 
-
-
-//readme
-//exclude features
-//copyrights
-//cargo deny 
-//cargo audit
-//cargo AUR + cargo deb + install.sh
-//systemd unit file
-//openrc service file
-
 const INOTIFY_EPOLL_TOKEN: u64 = 0;
 const SIGNAL_EPOLL_TOKEN: u64 = 1;
 const EPOLL_BUF_LEN: usize = 2;
@@ -68,10 +58,11 @@ impl InotifyState {
 
 }
 
+//Initialise everything, pass it to event loop
 fn main() {
     let cli_args = CliArgs::parse();
 
-    Logger::init(cli_args.verbose, cli_args.log_file);
+    Logger::init(cli_args.verbose, &cli_args.log_file);
 
     let cfg = Cfg::init(&cli_args.config).unwrap_or_else(|err| {
         Logger::fatal(format!("Error parsing config: {err}"));
@@ -81,7 +72,9 @@ fn main() {
         println!("OK!");
         process::exit(0);
     }
-    
+
+    drop(cli_args);
+
     let inotify_state = init_inotify(&cfg).unwrap_or_else(|err| {
         Logger::fatal(format!("Inotify init/add_watch error: {err}"));
     });
@@ -138,7 +131,7 @@ fn handle_inotify(inotify_state: &InotifyState) {
                     let script = match inotify_state.wd_to_script.get(&event.wd){
                         Some(script) => script,
                         None => {
-                            Logger::error("No script path found for inotify wd. Skipping"); //Internal?
+                            Logger::error("No script path found for inotify wd. Skipping");
                             continue;
                         },
                     };
@@ -259,7 +252,6 @@ fn inotify_fill_from_cfg(inotify_state: &mut InotifyState, cfg: &Cfg) {
 }
 
 //not including the initial dir
-//does NOT traverse symlinks
 fn recursive_dir_walk(path: &Path) -> Option<Vec<PathBuf>> {
 
     let mut ret: Vec<PathBuf> = Vec::new();
