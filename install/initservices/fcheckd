@@ -1,0 +1,30 @@
+#!/sbin/openrc-run
+supervisor=supervise-daemon
+
+supervise_daemon_args="--respawn --respawn-delay 5 --respawn-max 5 --respawn-period 60"
+
+name="fcheckd"
+description="Fcheckd inode monitoring service"
+command="/usr/local/bin/fcheckd"
+
+
+#substitute command args here
+command_args="${command_args:-}"
+command_user="${command_user:-root}"
+
+#OR use with cli opt for logging
+output_log="/var/log/fcheckd.log"
+error_log="/var/log/fcheckd.err"
+
+pidfile="/run/${RC_SVCNAME}.pid"
+extra_started_commands="reload"
+
+depend() {
+	need localmount
+}
+
+reload() {
+	ebegin "Reloading ${RC_SVCNAME} config (SIGHUP)"
+	supervise-daemon "${RC_SVCNAME}" --signal HUP
+	eend $?
+}

@@ -1,0 +1,14 @@
+#This is an example configuration for fcheckd.
+#For available events see inotify(7)
+
+[[watch]]											#specifies a single watch, there can be several in config
+path="/etc/fcheckd/config.toml"											   #path to watched file or directory
+script="/path/to/script"												#path to script that will be executed
+events=["close_write", "delete_self"]					#events with file(s) on which script will be executed
+
+[[watch]]
+path="etc/fcheckd/"
+recursive=true														 #optional, ignored if path leads to file
+script="/path/to/some/other/script/maybe/even/the/same/one"
+events=["create", "oneshot"]
+

@@ -1,0 +1,27 @@
+[Unit]
+Description=Fcheckd inode monitoring service
+
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+[Service]
+Type=simple
+WorkingDirectory=/etc/fcheckd 
+ExecStart=/usr/local/bin/fcheckd
+
+Restart=on-failure
+RestartSec=5
+
+#idle does not exceed 2M, ~1.1M on release build and ~23M on debug, although you won't be using debug 
+MemoryMax=256M  
+#still might be a lot, limit more or less if you want to, depending on your config
+#it's here to prevent any kinds of event->script->event loops
+TasksMax=50 
+
+ExecReload=kill -1 $MAINPID
+
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
