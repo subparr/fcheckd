@@ -1,0 +1,139 @@
+Fcheckd
+-------
+
+Fchekd is an inode monitoring daemon based on inotify which allows its users to 
+monitor files and directories based on supplied config and execute user scripts
+on specified events with monitored files.
+--------------------------------------------------------------------------------
+
+Building from source
+
+Cargo and rustc are build dependencies. Firstly:
+
+git clone https://codeberg.org/subparr/fcheckd.git
+cd fcheckd
+
+Then you can either "cargo build --release" to only get the artifact in 
+target/release/ or run install/install.sh, which will build and install fcheckd. 
+Currently only systemd and openrc are supported.
+
+Some parts of installation script require root priveleges so make sure to check 
+out the sources.
+--------------------------------------------------------------------------------
+
+Basic usage
+
+Available events are specified by inotify api and listed in its manpage, i.e. 
+see inotify(7).
+
+Config format as follows:
+
+#specifies a single watch, there can be several in config
+[watch]]									
+#path to watched file or directory
+path = "/absolute/path/to/watched/file"	                                   
+#optional, ignored if path leads to file
+recursive = true								
+#path to script that will be executed
+script = "/absolute/path/to/script"						
+#events with file(s) on which script will be executed
+events = ["close", "modify"]						   
+
+Adding a watch to a directory means adding watch to all the files contained in
+this directory.
+Do note that to avoid ambiguity paths MUST be absolute.
+
+If original watch path points at a symlink it WILL be resolved, although no
+further symlinks will be resolved in case of recursive = true.
+This was made intentionally to avoid symlink loops.
+
+Default config locations are /etc/fcheckd/config.toml and
+$HOME/.config/fcheckd/config.toml. Custom configlocation can be specified with
+the --config flag.
+Check fcheckd --help for full list of flags.
+
+For config reload send SIGHUP(1) to the daemon or simply
+"systemctl reload fchekd" in case you use systemd.
+For openrc it is "rc-service fcheckd reload".
+Do note that config gets reloaded indefinitely whether it was changed or not.
+--------------------------------------------------------------------------------
+
+Known quirks
+
+I strongly suggest to test watches by specifying dummy script first as the
+circumstances under which the watches are triggered might not be so obvious.
+For instance, IN_ACCESS is triggered for each read() and uponusing fish shell
+autosuggestions inside a watched directory, watch will get triggered on each
+keystroke as a filename is typed in, as read() is called on each keystroke.
+
+One possible way of mitigating a watch firing several times when a directory or 
+a file have been accessed by something is to specify "oneshot" event.
+This way, watch can only be triggered once and theninvalidated by the kernel. 
+Do note that if another event somehow precedes invalidation event it will still
+beprocessed.
+
+I also suggest to be very careful with your scripts, as you need to make sure
+that they won't trigger your watches, which in return will trigger the same
+scripts... You get the point, recursively triggering watches
+is possible and not recommended, although is going to be fixed with the delay
+config parameter.
+
+In current version watches for files are established as pointing to files. It is
+important because some text editors(like neovim) upon editing a file substitute
+the original with an edited copy, which means the original file gets deleted
+and the watch gets removed by the kernel, since there is nothing to watch on the
+original inode, which also means IN_MODIFY (or "modify" in config) flag doesn't
+even get triggered upon file "modification". That's why it is important to
+distinguish the tool being an inode watcher rather than a file watcher, until
+the file watching logic gets changed.
+
+For future updates that means that you as a user will still need to be aware of 
+such quirks when it comes to monitoring files or directories, although your
+watches will be safe, unless it doesn't depend on my code.
+--------------------------------------------------------------------------------
+
+Security considerations
+
+No isolation and/or limiting techniques were used in service files except for
+memory and child process limit, reason being that this way tool will not assume
+the use case as, for instance, introducing namespace isolation like private tmp
+will limit the watching capabilites of the daemon. Intdroducing seccomp will
+limit the capabilities of your scripts (same case with namespace isolation),
+and MAC is not of my concern as a developer of the tool since it is user
+controlled and policies may depend on the use case.
+
+Configuration is read in the following order:
+Cli config path via -c arg -> ~/.config/fcheckd/config.toml ->
+/etc/fcheckd/config.toml
+
+Default permissions for /etc/fcheckd/config.toml are 600 root owned and this 
+configuration is prefferable whenrunning daemon from root. The configuration
+should NOT be accessible for non root users as changing the config for daemon
+run from root introduces whatever the non root user may come up with.
+
+Always make sure that for daemon running from root the config, if passed via
+cli options, is unaccessible tonon root users the same way as config under
+/etc/fcheckd/ is unaccessible.
+
+For daemon running from unpriveleged user home config location is prefferable
+and is pretty much a default as evident from configuration load order.
+--------------------------------------------------------------------------------
+
+TODOs:
+	- Pass path to file to a script, event on which triggered a script
+	- Rewrite logic for adding watches for files (hence inode monitoring daemon)
+	- Add tests as the logic gets rewritten
+	- Introduce watch_inode in config for old behaviour
+	- Add timeout option for config, which will require multithreading
+	- Implement symlink loop detection to lift the restriction on symlinks
+--------------------------------------------------------------------------------
+
+Contributing
+
+Any and all contributions and feedback are welcome.
+--------------------------------------------------------------------------------
+
+License
+
+Fcheckd is licensed under GPL-3.0-only.
+See LICENSE for more information.
