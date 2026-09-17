@@ -5,10 +5,12 @@ use clap::Parser;
 use std::path::PathBuf;
 
 #[derive(Parser)]
-#[command(version, about= "Watch files and react to their changes",
-    after_help = "Report bugs to subparr@tuta.io\nFor more details see fcheckd(1)")]
+#[command(
+    version,
+    about = "Watch files and react to their changes",
+    after_help = "Report bugs to subparr@tuta.io\nFor more details see fcheckd(1)"
+)]
 pub struct CliArgs {
-    
     ///Path to config
     #[arg(short, long)]
     pub config: Option<PathBuf>,
@@ -25,5 +27,3 @@ pub struct CliArgs {
     #[arg(short = 'l', long)]
     pub log_file: Option<PathBuf>,
 }
-
-
