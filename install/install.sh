@@ -28,11 +28,11 @@ pick_elevation() {
 		return
 	fi
 
-	if [ -f "$(which sudo)" ]; then
+	if command -v sudo >/dev/null 2>&1; then
 		ELEVATE="sudo"
-	elif [ -f "$(which doas)" ]; then
+	elif command -v doas >/dev/null 2>&1; then
 		ELEVATE="doas"
-	elif [ -f "$(which su)" ]; then
+	elif command -v su >/dev/null 2>&1; then
 		ELEVATE="su"
 	else
 		echo "Error: no privilege escalation tool found (sudo/doas/su) for some reason." >&2
@@ -92,7 +92,7 @@ install_binary() {
 }
 
 install_config() {
-	if [ -d "$CONFIG_DIR" ]; then
+	if [ ! -d "$CONFIG_DIR" ]; then
 		echo "Creating config dir at $CONFIG_DIR"
 		elevate mkdir -p "$CONFIG_DIR"
 	fi
@@ -113,10 +113,19 @@ install_systemd_unit() {
 		echo "Error: $SYSTEMD_UNIT_SRC not found, blame the maintainer" >&2
 		exit 1
 	fi
-	echo "Creating systemd unit at $SYSTEMD_UNIT_DEST and user unit at $HOME_SYSTEMD_UNIT_DEST"
-	elevate install -Dm644 "$SYSTEMD_UNIT_SRC" "$SYSTEMD_UNIT_DEST"
-	install -Dm644 "$SYSTEMD_UNIT_SRC" "$HOME_SYSTEMD_UNIT_DEST"
-	elevate systemctl daemon-reload
+	if [ -f "$SYSTEMD_UNIT_DEST" ]; then
+		echo "$SYSTEMD_UNIT_DEST exists, leaving it alone"
+	else
+		echo "Creating systemd unit at $SYSTEMD_UNIT_DEST and user unit at $HOME_SYSTEMD_UNIT_DEST"
+		elevate install -Dm644 "$SYSTEMD_UNIT_SRC" "$SYSTEMD_UNIT_DEST"
+	fi
+
+	if [ -f "$HOME_SYSTEMD_UNIT_DEST" ]; then
+		echo "$HOME_SYSTEMD_UNIT_DEST exists, leaving it alone"
+	else
+		install -Dm644 "$SYSTEMD_UNIT_SRC" "$HOME_SYSTEMD_UNIT_DEST"
+		elevate systemctl daemon-reload
+	fi
 
 	if [ "$fresh_install" == true ]; then
 		echo
@@ -135,10 +144,15 @@ install_openrc_service() {
 		echo "Error: $OPENRC_SCRIPT_SRC not found, blame the maintainer" >&2
 		exit 1
 	fi
-	echo "Creating openrc script at $OPENRC_SCRIPT_DEST"
-	elevate install -Dm755 "$OPENRC_SCRIPT_SRC" "$OPENRC_SCRIPT_DEST"
-	echo "Creating openrc conf script at $OPENRC_SCRIPTCONFD_DEST"
-	elevate install -Dm644 "$OPENRC_SCRIPTCONFD_SRC" "$OPENRC_SCRIPTCONFD_DEST"
+
+	if [ -f "$OPENRC_SCRIPT_DEST" ]; then
+		echo "$OPENRC_SCRIPT_DEST exists, leaving it alone"
+	else
+		echo "Creating openrc script at $OPENRC_SCRIPT_DEST"
+		elevate install -Dm755 "$OPENRC_SCRIPT_SRC" "$OPENRC_SCRIPT_DEST"
+		echo "Creating openrc conf script at $OPENRC_SCRIPTCONFD_DEST"
+		elevate install -Dm644 "$OPENRC_SCRIPTCONFD_SRC" "$OPENRC_SCRIPTCONFD_DEST"
+	fi
 
 	if [ "$fresh_install" == true ]; then
 		echo
