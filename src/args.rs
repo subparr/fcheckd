@@ -8,7 +8,7 @@ use std::path::PathBuf;
 #[command(
     version,
     about = "Watch files and react to their changes",
-    after_help = "Report bugs to subparr@tuta.io\nFor more details see fcheckd(1)"
+    after_help = "Report bugs to subparr@tuta.io\n"
 )]
 pub struct CliArgs {
     ///Path to config
