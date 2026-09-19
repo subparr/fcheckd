@@ -68,7 +68,7 @@ keystroke as a filename is typed in, as read() is called on each keystroke.
 
 One possible way of mitigating a watch firing several times when a directory or 
 a file have been accessed by something is to specify "oneshot" event.
-This way, watch can only be triggered once and theninvalidated by the kernel. 
+This way, watch can only be triggered once and the invalidated by the kernel. 
 Do note that if another event somehow precedes invalidation event it will still
 beprocessed.
 
@@ -102,17 +102,17 @@ limit the capabilities of your scripts (same case with namespace isolation),
 and MAC is not of my concern as a developer of the tool since it is user
 controlled and policies may depend on the use case.
 
-Configuration is read in the following order:
+Configuration priority is in the following order:
 Cli config path via -c arg -> ~/.config/fcheckd/config.toml ->
 /etc/fcheckd/config.toml
 
 Default permissions for /etc/fcheckd/config.toml are 600 root owned and this 
-configuration is prefferable whenrunning daemon from root. The configuration
+configuration is prefferable when running daemon from root. The configuration
 should NOT be accessible for non root users as changing the config for daemon
 run from root introduces whatever the non root user may come up with.
 
 Always make sure that for daemon running from root the config, if passed via
-cli options, is unaccessible tonon root users the same way as config under
+cli options, is unaccessible to non root users the same way as config under
 /etc/fcheckd/ is unaccessible.
 
 For daemon running from unpriveleged user home config location is prefferable
